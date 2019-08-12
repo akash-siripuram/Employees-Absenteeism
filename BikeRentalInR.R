@@ -1,0 +1,350 @@
+rm(list=ls())
+#install.packages("RColorBrewer")
+#install.packages("class")
+
+library("xlsx")
+library("corrgram")
+library(caret)
+library(rpart)
+library(MASS)
+library(DMwR)
+library(randomForest)
+library(Metrics)
+library(dplyr)
+library(usdm)
+library(RColorBrewer)
+#-------------------------------------------------------------------------------------------------
+#Getting data
+data=read.xlsx("Absent.xls",sheetIndex=1)
+
+#-------------------------------------------------------------------------------------------------
+#Changing the datatype
+str(data)
+
+colnames(data)
+
+for(i in c(1,2,3,4,5,12,13,14,15,16,17)){
+  
+  data[,i]=as.factor(data[,i])
+}
+#converting the datatype of Continous variables into integer
+for(i in c(6,7,8,9,10,11,18,19,20,21)){
+  
+  data[,i]=as.integer(data[,i])
+}
+
+
+#-------------------------------------------------------------------------------------------------
+
+int_var=data[,c(6,7,8,9,10,11,18,19,20,21)]
+cat_var=data[,-c(6,7,8,9,10,11,18,19,20,21)]
+
+#-------------------------------------------------------------------------------------------------
+
+#missing value analysis:
+missing_val=data.frame(apply(data,2,function(x){sum(is.na(x))}))
+
+sum(missing_val)
+# df=data[rowSums(is.na(data))>0,]
+# df
+#-------------------------------------------------------------------------------------------------
+str(data)
+
+data=data[!is.na(data$Absenteeism.time.in.hours),]
+dim(data)
+
+#Imputing the values using KnnImputation:
+
+data=knnImputation(data,k=5)
+data
+
+
+#-------------------------------------------------------------------------------------------------
+#Outlier Analysis:
+
+par('mar')
+par(mar=c(1,1,1,1))
+
+par(mfrow=c(5,2))
+boxplot(data$Absenteeism.time.in.hours,col="Darkblue",main="Absenteeism.time.in.hours")
+boxplot(data$Body.mass.index,col="Darkblue",main="Body.mass.index")
+boxplot(data$Transportation.expense,col="Darkblue",main="Transportation.expense")
+boxplot(data$Distance.from.Residence.to.Work,col="Darkblue",main="Distance.from.Residence.to.Work")
+boxplot(data$Service.time,col="Darkblue",main="Service.time")
+boxplot(data$Weight,col="Darkblue",main="Weight")
+boxplot(data$Height,col="Darkblue",main="Height")
+boxplot(data$Hit.target,col="Darkblue",main="Hit.target")
+boxplot(data$Age,col="Darkblue",main="Age")
+str(data)
+colnames(data)
+#-------------------------------------------------------------------------------------------------
+
+#Replacing the outliers with NA
+
+for (i in c(6,7,8,10,11,18,19,20,21)){
+  val=data[,i][data[,i]%in%boxplot.stats(data[,i])$out]
+  data[,i][data[,i]%in% val]=NA
+}  
+#-------------------------------------------------------------------------------------------------
+#Imputation using KnnImputation
+
+data=knnImputation(data,k=5)
+
+#Checking the missing values:
+missing_val=data.frame(apply(data,2,function(x){sum(is.na(x))}))
+missing_val
+#-------------------------------------------------------------------------------------------------
+#Checking the outliers again with boxplot after removing outliers
+
+par('mar')
+par(mar=c(1,1,1,1))
+
+par(mfrow=c(5,2))
+boxplot(data$Absenteeism.time.in.hours,col="Darkblue",main="Absenteeism.time.in.hours")
+boxplot(data$Body.mass.index,col="Darkblue",main="Body.mass.index")
+boxplot(data$Transportation.expense,col="Darkblue",main="Transportation.expense")
+boxplot(data$Distance.from.Residence.to.Work,col="Darkblue",main="Distance.from.Residence.to.Work")
+boxplot(data$Service.time,col="Darkblue",main="Service.time")
+boxplot(data$Weight,col="Darkblue",main="Weight")
+boxplot(data$Height,col="Darkblue",main="Height")
+boxplot(data$Hit.target,col="Darkblue",main="Hit.target")
+boxplot(data$Age,col="Darkblue",main="Age")
+
+colnames(data)
+#-------------------------------------------------------------------------------------------------
+#Feature Selection:
+
+#correlation plot:
+Num_data=data[,c(6,7,8,9,10,11,18,19,20,21)]
+corrgram(Num_data,order=F,upper.panel=panel.pie,text.panel =panel.txt,main="Correlation plot")
+
+#-------------------------------------------------------------------------------------------------
+# Checking importance of Catagorical variables using random Forest:
+
+
+fit_rf = randomForest(data$Absenteeism.time.in.hours~., data=data)
+
+# Create an importance 
+Rf_Imp=importance(fit_rf)
+#fix(Rf_Imp)
+#-------------------------------------------------------------------------------------------------
+
+#Removing farcical info:
+
+data= data[!data$Month.of.absence==0 & !data$Reason.for.absence==0, ]
+
+# data=data[!data$Reason.for.absence==0,]
+# data=data[!data$Month.of.absence==0,]
+
+
+#Creating a copy
+datat=data
+
+#-------------------------------------------------------------------------------------------------
+
+#Checking the dimensions and structure:
+
+dim(datat)
+str(datat)
+
+#-------------------------------------------------------------------------------------------------
+#Feature Scaling:
+
+str(datat)
+colnames(datat)
+# Applying feature selecton:
+
+for(i in c(6,7,8,9,10,11,18,19,20,21)){
+  
+  datat[,i] = (datat[,i] - min(datat[,i]))/(max(datat[,i] - min(datat[,i])))
+}
+dim(datat)
+#-------------------------------------------------------------------------------------------------
+#Removing the ID and Body.Mass.Index variables:
+data_cpy=data
+datat_cpy=datat
+datat = subset(datat, select = -c(1,20))
+
+
+#-------------------------------------------------------------------------------------------------
+#visualization the data:
+par(mar=c(5.1,4.1,4.1,2.1))
+
+
+#-------------------------------------------------------------------------------------------------
+#Visualizing for reason for absence data
+
+
+ReasonForAbsencevisual=aggregate(datat_cpy[,21], list(datat_cpy$Reason.for.absence), mean)
+colnames(ReasonForAbsencevisual)=c("Reason.for.Absence","Abseenteism")
+
+barplot(ReasonForAbsencevisual$Abseenteism,names.arg =ReasonForAbsencevisual$Reason.for.Absence,col="Darkred",xlab="Reason.For.Absence",ylab="Absenteeism count",ylim=c(0,0.6))
+
+#-------------------------------------------------------------------------------------------------
+
+#Visualizing for ID data
+
+IDVisual=aggregate(datat_cpy[,21], list(datat_cpy$ID), mean)
+colnames(IDVisual)=c("ID","Abseenteism")
+par(mar=c(5.1,4.1,4.1,2.1))
+barplot(IDVisual$Abseenteism,names.arg =IDVisual$ID,col="Darkblue",xlab="ID",ylab="Absenteeism count",ylim=c(0,0.6))
+
+
+#-------------------------------------------------------------------------------------------------
+
+###Visualizing for age data
+data_cpy$Age=as.factor(data_cpy$Age)
+AgeVisual=aggregate(datat_cpy[, 21], list(data_cpy$Age), mean)
+colnames(AgeVisual)=c("Age","Abseenteism")
+barplot(AgeVisual$Abseenteism,names.arg =AgeVisual$Age,col="Darkred",xlab="Age",ylab="Absenteeism count",ylim=c(0,0.6))
+
+#-------------------------------------------------------------------------------------------------
+
+###visualizing month.of.absence w.r.t absenteeism count
+hm=aggregate(datat_cpy[,21],list(datat_cpy$Month.of.absence),mean)
+colnames(hm)=c("Month.of.absence","Absenteeism")
+barplot(hm$Absenteeism,names.arg =hm$Month.of.absence,col="Darkblue",xlab="Months",ylab="Absenteeism count",ylim = c(0,0.4))
+
+#-------------------------------------------------------------------------------------------------
+
+###visualizing month.of.absence w.r.t absenteeism count
+MOAVisual=aggregate(datat_cpy[,21],list(datat_cpy$Month.of.absence),mean)
+colnames(MOAVisual)=c("Month.of.absence","Absenteeism")
+barplot(MOAVisual$Absenteeism,names.arg =MOAVisual$Month.of.absence,col="Darkblue",xlab="Months",ylab="Absenteeism count",ylim = c(0,1.0))
+
+
+#-------------------------------------------------------------------------------------------------
+
+
+
+###visualizing Day.of.the.week w.r.t absenteeism
+DOWVisual=aggregate(datat_cpy[,21],list(datat_cpy$Day.of.the.week),mean)
+colnames(DOWVisual)=c("Day.of.the.week","Absenteeism")
+barplot(DOWVisual$Absenteeism,names.arg =DOWVisual$Day.of.the.week,col="Darkred",xlab="Days",ylab="Absenteeism count",ylim=c(0,0.4))
+
+#-------------------------------------------------------------------------------------------------
+
+###Visualizing the Social.drinker w.r.t absenteeism 
+SDVisual=aggregate(datat_cpy[,21],list(datat_cpy$Social.smoker),mean)
+colnames(SDVisual)=c("SocialSmoker","Absenteeism")
+barplot(SDVisual$Absenteeism,names.arg =SDVisual$SocialSmoker,col="Darkblue",xlab="SocialSmoker",ylab="Absenteeism count",ylim=c(0,1.0))
+
+#-------------------------------------------------------------------------------------------------
+
+###Visualizing the Social.Smoker w.r.t absenteeism 
+SSVisual=aggregate(datat_cpy[,21],list(datat_cpy$Social.smoker),mean)
+colnames(SSVisual)=c("SocialSmoker","Absenteeism")
+barplot(SSVisual$Absenteeism,names.arg =SSVisual$SocialSmoker,col="Darkred",xlab="SocialSmoker",ylab="Absenteeism count",ylim=c(0,0.8))
+datat
+colnames(datat)
+
+#-------------------------------------------------------------------------------------------------
+
+
+#Model Development
+set.seed(321)
+indexTrain = createDataPartition(datat$Absenteeism.time.in.hours, p = .80, list = FALSE)
+train = datat[ indexTrain,]
+test  = datat[-indexTrain,]
+
+dim(datat)
+dim(train)
+dim(test)
+#-------------------------------------------------------------------------------------------------
+
+#Applying models:
+
+
+#Applying Decision Tree on test data:
+
+DT=rpart(Absenteeism.time.in.hours~ .,data=train,method="anova")
+DTPredictions=predict(DT,test)
+
+#Calculating rmse for test
+rmse(test$Absenteeism.time.in.hours,DTPredictions)
+
+#RMSE value: 0.190
+
+#-------------------------------------------------------------------------------------------------
+# Applying RandomForest Model:
+
+# Fitting model
+fit <- randomForest(train$Absenteeism.time.in.hours ~ .,train,ntree=500)
+
+
+rfpredicted= predict(fit,test)
+
+#calculating rmse
+
+rmse(test$Absenteeism.time.in.hours,rfpredicted)
+
+#RMSE value:  0.18
+
+#-------------------------------------------------------------------------------------------------
+# As we have seen random forest is providing us the less RMSE value we can say that we
+# Can use random forest in future for any findings.
+#-------------------------------------------------------------------------------------------------
+
+#Answering the questions:
+#####1. causes of absenteism:
+
+###From the visualizations
+
+###1. we came to know that ID no 6,16,21,23,31 are having high absenteeism When compared with others.
+
+##2. when reason.for.absenteeism is taken these levels have highest absenteeism count
+
+#   1,3,6,9,15,17,22,24,26
+#   1. Certain infectious and parasitic diseases
+#   3. Diseases of the blood and blood-forming organs and certain disorders involving the immune mechanism
+#   6. Diseases of the nervous system
+#   9. Diseases of the circulatory system
+#  15. Pregnancy, childbirth and the puerperium
+#  17. Congenital malformations, deformations and chromosomal abnormalities
+#  22. patient follow-up
+#  24. blood donation 
+#  26. unjustified absence 
+#  Here we must take necessary action on employees who won't mark reason for absence field.
+
+##3. when the visualization is done for Age we found that age below 30 has less absenteeism, 
+
+# 31,33,35,36,39,41,43,46,48 age group has high absenteeism so, 
+# Taking action on these age grouped employees will solve some part of the prooblem.
+
+
+##4. when done visualization on Month.of.absence 
+#    we have found that months march and july are having high absenteeism and 
+#    January is having low absenteeism.
+
+##5. when done visualization on Days.of.absence
+#    we found that monday is highest because it is followed by week days.
+
+##6. Social Drinker an Social Smoker are also affecting absenteeism but in a slight manner.
+#    It won't affect much even if the employees are having the habits of smoking and drinking.
+
+
+####2. How much losses every month can we project in 2011 if same trend of absenteeism continues? 
+fix(data)
+colnames(data)
+data$Absenteeism.time.in.hours=as.integer(data$Absenteeism.time.in.hours)
+G_RFA=aggregate(data[,21],list(data$Month.of.absence),mean)
+colnames(G_RFA)=c("Months","Absenteeism")
+G_MOA=aggregate(data$Service.time,list(data$Month.of.absence),mean)
+colnames(G_MOA)=c("Months","service.time")
+G_WLD_MOA=aggregate(data$Work.load.Average.day.,list(data$Month.of.absence),mean)
+colnames(G_WLD_MOA)=c("Months","work.load.average.day")
+
+MergeOne=merge(G_RFA,G_MOA,by="Months")
+MergedData=merge(MergeOne,G_WLD_MOA,by="Months")
+
+
+MergedData$Losses=round((MergedData$Absenteeism/(MergedData$service.time))*(MergedData$work.load.average.day))
+options(scipen = 10)
+par(las=1)
+MergedData=MergedData[order(MergedData$Months),]
+FinalBar=barplot(MergedData$Losses,names.arg =MergedData$Months,col="Darkred",xlab="Months",ylab="Loss",ylim=c(0,140000))
+text(x = FinalBar, y = MergedData$Losses, label = MergedData$Losses, pos = 3, cex = 0.8, col = "Darkblue")
+
+
+
+
